@@ -1,0 +1,759 @@
+<!--
+  SHTTS Web Synthesizer
+
+  Copyright (C) 2025 shtts-web contributors
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, see <https://www.gnu.org/licenses/>.
+
+  LICENSES & THIRD-PARTY NOTICES
+  ==============================
+
+  1. Unicorn Engine (unicorn-arm.min.js)
+     Copyright (c) 2015-2024, Unicorn Engine contributors
+     Licensed under the GNU General Public License v2.0 (GPLv2).
+     JS port: https://github.com/AlexAltea/unicorn.js
+     Upstream: https://github.com/unicorn-engine/unicorn
+     A copy of GPLv2 is available at https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+  2. SHARP SHTTS v1.1.1 Text-to-Speech Engine
+     The SHTTS TTS engine, including all voice model data and synthesis code,
+     is the proprietary property of SHARP Corporation.
+     This tool does NOT contain any SHARP code or data. It requires the user
+     to supply their own legally-obtained ROM or arm9.bin file at runtime.
+
+  3. Shaberu! DS Oryouri Navi
+     (c) 2006 Nintendo / indieszero. All rights reserved.
+     This tool does NOT contain any Nintendo copyrighted material.
+     Users must supply their own legally-obtained copy of the game ROM.
+
+  DISCLAIMER
+  ==========
+  This tool is provided for personal, non-commercial research and
+  educational purposes only. No copyrighted game data, proprietary engine
+  code, or voice model data is distributed with this tool. The user is
+  solely responsible for ensuring they have the legal right to use any
+  ROM or binary files they load into this tool.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SHTTS Web Synthesizer</title>
+<style>
+body { font-family: monospace; max-width: 800px; margin: 20px auto; padding: 0 10px; }
+label { display: block; margin-top: 8px; }
+select, input[type=text], input[type=number], input[type=range], input[type=file] { width: 100%; box-sizing: border-box; }
+button { margin-top: 12px; padding: 8px 24px; font-size: 14px; }
+button:disabled { opacity: 0.5; }
+#log { white-space: pre-wrap; font-size: 12px; background: #f0f0f0; padding: 8px; margin-top: 12px; max-height: 300px; overflow-y: auto; border: 1px solid #ccc; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+#audio-out { margin-top: 12px; width: 100%; }
+#download-link { display: none; margin-top: 8px; }
+.slider-row { display: flex; align-items: center; gap: 8px; }
+.slider-row input[type=range] { flex: 1; }
+.slider-row span { min-width: 40px; text-align: right; }
+</style>
+</head>
+<body>
+<h2>SHTTS Web Synthesizer</h2>
+<p>SHARP SHTTS v1.1.1 — Shaberu! DS Oryouri Navi TTS engine in the browser</p>
+<details style="margin-bottom:12px; font-size:11px; color:#666; border:1px solid #ddd; padding:6px; background:#fafafa;">
+<summary style="cursor:pointer; font-weight:bold;">Legal Notice</summary>
+<p>The SHTTS text-to-speech engine and voice model data are the proprietary property of <strong>SHARP Corporation</strong>.
+<em>Shaberu! DS Oryouri Navi</em> is &copy; 2006 Nintendo / indieszero.</p>
+<p>This tool contains no copyrighted game data, engine code, or voice models.
+You must supply your own legally-obtained ROM or arm9.bin file.
+For personal, non-commercial research and educational use only.</p>
+<p>ARM emulation powered by <a href="https://github.com/unicorn-engine/unicorn">Unicorn Engine</a> (GPLv2).</p>
+</details>
+
+<label>ROM or arm9.bin file:
+<input type="file" id="rom-file" accept=".nds,.bin">
+</label>
+<div id="file-status"></div>
+
+<label>Text (katakana + prosody markers):
+<input type="text" id="tts-text" value="コンニチワ．" placeholder="カタカナテキスト．">
+</label>
+
+<div class="row">
+<label>Voice:
+<select id="voice">
+<option value="male">male</option>
+<option value="female">female</option>
+<option value="admale" selected>admale</option>
+<option value="adfemale">adfemale</option>
+<option value="emale">emale</option>
+<option value="efemale">efemale</option>
+<option value="chmale">chmale</option>
+<option value="chfemale">chfemale</option>
+<option value="sisters">sisters</option>
+<option value="meimu">meimu</option>
+<option value="space">space</option>
+<option value="giant">giant</option>
+</select>
+</label>
+<label>Emotion:
+<select id="emotion">
+<option value="angry">angry</option>
+<option value="business">business</option>
+<option value="calm">calm</option>
+<option value="depressed">depressed</option>
+<option value="excited">excited</option>
+<option value="falsetto">falsetto</option>
+<option value="happy">happy</option>
+<option value="loud">loud</option>
+<option value="monotone">monotone</option>
+<option value="perky" selected>perky</option>
+<option value="quiet">quiet</option>
+<option value="sarcastic">sarcastic</option>
+<option value="scared">scared</option>
+<option value="shout">shout</option>
+<option value="tense">tense</option>
+<option value="whisper">whisper</option>
+</select>
+</label>
+</div>
+
+<label>Speed (20-2200):
+<div class="slider-row">
+<input type="range" id="speed" min="20" max="2200" value="120">
+<span id="speed-val">120</span>
+</div>
+</label>
+
+<label>Volume (-10000..360):
+<div class="slider-row">
+<input type="range" id="volume" min="-10000" max="360" value="180">
+<span id="volume-val">180</span>
+</div>
+</label>
+
+<label>Pitch (0 = from voice, 3500-7000):
+<div class="slider-row">
+<input type="range" id="pitch" min="0" max="7000" value="0" step="50">
+<span id="pitch-val">0</span>
+</div>
+</label>
+
+<button id="synth-btn" disabled>Synthesize</button>
+
+<audio id="audio-out" controls></audio>
+<a id="download-link" href="#">Download WAV</a>
+
+<div id="log"></div>
+
+<script src="lib/unicorn-arm.min.js"></script>
+<script>
+"use strict";
+
+// =====================================================================
+// Shift-JIS encoding table for katakana + prosody markers
+// =====================================================================
+
+const SJIS_TABLE = {};
+
+// Build katakana table: Unicode -> Shift-JIS bytes
+// Full-width katakana: ァ(0x30A1) -> 0x8340, ア(0x30A2) -> 0x8341, ...
+// The mapping: for Unicode U+30A1..U+30F6 (katakana ァ-ヶ)
+// Shift-JIS encodes these in a block starting at 0x8340
+// Pattern: SJ = 0x8340 + (unicode - 0x30A1)
+// But Shift-JIS has a gap: bytes 0x7F is skipped in the low byte
+// SJ low byte goes: 0x40..0x7E, 0x80..0x9E, 0x9F..0xFC
+// For katakana: first byte 0x83, second byte from 0x40
+// ァ=8340, ア=8341, ィ=8342, イ=8343, ... up to ミ=837E, then skip 7F,
+// ム=8380, メ=8381, ...
+
+(function buildSjisTable() {
+    // Full-width katakana Unicode U+30A1 to U+30F6 (86 chars: ァ to ヶ)
+    // Shift-JIS mapping for these is sequential from 0x8340,
+    // but low byte skips 0x7F
+    const kanaStart = 0x30A1; // ァ
+    const kanaEnd = 0x30F6;   // ヶ
+    let sjByte1 = 0x83;
+    let sjByte2 = 0x40;
+
+    for (let u = kanaStart; u <= kanaEnd; u++) {
+        SJIS_TABLE[u] = [sjByte1, sjByte2];
+        sjByte2++;
+        if (sjByte2 === 0x7F) sjByte2 = 0x80; // skip 0x7F
+        if (sjByte2 > 0xFC) { sjByte1++; sjByte2 = 0x40; }
+    }
+
+    // ヷ(U+30F7)=0x8397, ヸ(U+30F8)=0x8398, ヹ(U+30F9)=0x8399, ヺ(U+30FA)=0x839A
+    SJIS_TABLE[0x30F7] = [0x83, 0x97];
+    SJIS_TABLE[0x30F8] = [0x83, 0x98];
+    SJIS_TABLE[0x30F9] = [0x83, 0x99];
+    SJIS_TABLE[0x30FA] = [0x83, 0x9A];
+
+    // Prolonged sound mark ー (U+30FC) = 0x815B
+    SJIS_TABLE[0x30FC] = [0x81, 0x5B];
+
+    // Nakaguro ・ (U+30FB) = 0x8145
+    SJIS_TABLE[0x30FB] = [0x81, 0x45];
+
+    // Full-width punctuation / prosody markers
+    SJIS_TABLE[0xFF0E] = [0x81, 0x44]; // ．(fullwidth period) - but game uses ．= U+FF0E
+    SJIS_TABLE[0x3002] = [0x81, 0x42]; // 。(ideographic period)
+    // Actually the game uses these specific characters:
+    SJIS_TABLE[0xFF10] = [0x82, 0x4F]; // ０ (fullwidth digit zero)
+    SJIS_TABLE[0xFF12] = [0x82, 0x51]; // ２ (fullwidth digit two)
+    SJIS_TABLE[0xFF05] = [0x81, 0x93]; // ％ (fullwidth percent)
+    SJIS_TABLE[0xFF0F] = [0x81, 0x5E]; // ／ (fullwidth solidus)
+    SJIS_TABLE[0xFF3F] = [0x81, 0x51]; // ＿ (fullwidth low line)
+    SJIS_TABLE[0xFF01] = [0x81, 0x49]; // ！ (fullwidth exclamation)
+    SJIS_TABLE[0xFF1F] = [0x81, 0x48]; // ？ (fullwidth question)
+
+    // ．(U+FF0E) already handled above. But let's also handle the
+    // ideographic full stop variant used in the game's TTS strings:
+    // Looking at the Python code, ．is the sentence-end marker.
+    // Unicode U+FF0E = FULLWIDTH FULL STOP -> SJ 0x8144
+    // Already set above.
+
+    // Full-width hiragana (some TTS strings might use these)
+    // Hiragana: U+3041-U+3093 -> SJ 0x829F onwards
+    const hiraStart = 0x3041;
+    const hiraEnd = 0x3093;
+    sjByte1 = 0x82;
+    sjByte2 = 0x9F;
+    for (let u = hiraStart; u <= hiraEnd; u++) {
+        SJIS_TABLE[u] = [sjByte1, sjByte2];
+        sjByte2++;
+        if (sjByte2 === 0x7F) sjByte2 = 0x80;
+        if (sjByte2 > 0xFC) { sjByte1++; sjByte2 = 0x40; }
+    }
+
+    // Dakuten/handakuten combining marks (sometimes used standalone)
+    SJIS_TABLE[0x309B] = [0x81, 0x4A]; // ゛
+    SJIS_TABLE[0x309C] = [0x81, 0x4B]; // ゜
+
+    // ヴ (U+30F4) is within the range above, should be covered
+    // But let's verify: U+30F4 - U+30A1 = 0x53 = 83
+    // Starting from 0x40, +83 positions, skipping 0x7F:
+    // 0x40..0x7E = 63 chars, 0x80..0x93+? = need offset 83-63=20 more after gap
+    // 0x80 + 20 - 1 = 0x93. So ヴ = 0x8394. Correct.
+})();
+
+function encodeShiftJIS(text) {
+    const bytes = [];
+    for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        // ASCII range (includes the prosody marker ' = 0x27)
+        if (code < 0x80) {
+            bytes.push(code);
+        } else if (SJIS_TABLE[code]) {
+            bytes.push(...SJIS_TABLE[code]);
+        } else {
+            // Try to handle as UTF-16 surrogate or unknown
+            console.warn(`No Shift-JIS mapping for U+${code.toString(16).toUpperCase()}`);
+            bytes.push(0x3F); // '?'
+        }
+    }
+    bytes.push(0x00); // null terminator
+    return new Uint8Array(bytes);
+}
+
+// =====================================================================
+// Constants (ported from tts_synth.py)
+// =====================================================================
+
+const ARM9_BASE = 0x02000000;
+const ARM9_SIZE = 0x00400000;
+const HEAP_BASE = 0x02400000;
+const HEAP_SIZE = 0x003E0000;
+const DTCM_BASE = 0x027E0000;
+const DTCM_SIZE = 0x00004000;
+const IO_BASE   = 0x04000000;
+const IO_SIZE   = 0x00002000;
+const SHARED_WRAM_BASE = 0x03000000;
+const SHARED_WRAM_SIZE = 0x00008000;
+const VRAM_BASE = 0x06800000;
+const VRAM_SIZE = 0x000A4000;
+const ITCM_BASE = 0x01000000;
+const ITCM_SIZE = 0x00008000;
+
+const STACK_TOP = DTCM_BASE + DTCM_SIZE - 0x40; // 0x027E3FC0
+const SENTINEL  = 0x01007F00;
+const CALLBACK_ADDR = 0x01007100;
+
+const SHTTS_INIT = 0x0202C370;
+const SHTTS_SPEAK = 0x0202C5C8;
+const SHTTS_SET_PROPERTY = 0x0202C1AC;
+const SHTTS_CTX_SIZE = 0x14000;
+
+const STUB_FUNCTIONS = [
+    0x020D3324, // OS_LockMutex
+    0x020D32B8, // OS_UnlockMutex
+    0x020D28E0, // OS_CreateThread
+    0x020D266C, // OS_StartThread
+    0x020D2418, // OS_Sleep
+];
+
+const SYNC_PATCH_ADDR = 0x0202C740;
+
+const VOICE_MAP = {
+    male:0x101, female:0x102, admale:0x103, adfemale:0x104,
+    emale:0x105, efemale:0x106, chmale:0x107, chfemale:0x108,
+    sisters:0x109, meimu:0x10A, space:0x10B, giant:0x10C
+};
+
+const EMOTION_MAP = {
+    angry:0x201, business:0x202, calm:0x203, depressed:0x204,
+    excited:0x205, falsetto:0x206, happy:0x207, loud:0x208,
+    monotone:0x209, perky:0x20A, quiet:0x20B, sarcastic:0x20C,
+    scared:0x20D, shout:0x20E, tense:0x20F, whisper:0x210
+};
+
+const SAMPLE_RATE = 22050;
+
+// =====================================================================
+// UI Elements
+// =====================================================================
+
+const logEl = document.getElementById("log");
+const synthBtn = document.getElementById("synth-btn");
+const romFileEl = document.getElementById("rom-file");
+const fileStatusEl = document.getElementById("file-status");
+const audioEl = document.getElementById("audio-out");
+const downloadEl = document.getElementById("download-link");
+
+// Slider value displays
+for (const id of ["speed", "volume", "pitch"]) {
+    const slider = document.getElementById(id);
+    const display = document.getElementById(id + "-val");
+    slider.addEventListener("input", () => { display.textContent = slider.value; });
+}
+
+function log(msg) {
+    logEl.textContent += msg + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+    logEl.textContent = "";
+}
+
+// =====================================================================
+// ROM loading
+// =====================================================================
+
+let arm9Data = null;
+
+romFileEl.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    clearLog();
+    log("Loading " + file.name + " (" + file.size + " bytes)...");
+
+    const buf = await file.arrayBuffer();
+    const data = new Uint8Array(buf);
+
+    // Check if this is an NDS ROM (magic at 0xC0: 0x24FFAE51 etc.)
+    // Or simpler: check if it's larger than 2MB and has valid arm9 offset
+    if (data.length > 0x200) {
+        // Try to read arm9 offset/size from NDS header
+        const view = new DataView(buf);
+        const arm9Offset = view.getUint32(0x20, true);
+        const arm9Entry  = view.getUint32(0x24, true);
+        const arm9Ram    = view.getUint32(0x28, true);
+        const arm9Size   = view.getUint32(0x2C, true);
+
+        // Heuristic: valid NDS ROM has arm9 load address 0x02000000 and
+        // reasonable size
+        if (arm9Ram === 0x02000000 && arm9Size > 0x1000 && arm9Size < 0x400000 &&
+            arm9Offset + arm9Size <= data.length) {
+            log("Detected NDS ROM. Extracting arm9.bin...");
+            log("  arm9 offset: 0x" + arm9Offset.toString(16));
+            log("  arm9 size: 0x" + arm9Size.toString(16) + " (" + arm9Size + " bytes)");
+            arm9Data = data.slice(arm9Offset, arm9Offset + arm9Size);
+        } else if (arm9Ram === 0x02000000) {
+            // Might still be valid with different characteristics
+            log("NDS header found but arm9 extraction uncertain. Trying anyway...");
+            arm9Data = data.slice(arm9Offset, arm9Offset + arm9Size);
+        } else {
+            // Assume raw arm9.bin
+            log("Treating as raw arm9.bin.");
+            arm9Data = data;
+        }
+    } else {
+        arm9Data = data;
+    }
+
+    log("arm9.bin ready: " + arm9Data.length + " bytes");
+    fileStatusEl.textContent = "arm9.bin loaded (" + arm9Data.length + " bytes)";
+    synthBtn.disabled = false;
+});
+
+// =====================================================================
+// Unicorn Emulator Wrapper
+// =====================================================================
+
+function uint32ToBytes(val) {
+    // Little-endian u32 to Uint8Array(4)
+    return new Uint8Array([val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >>> 24) & 0xFF]);
+}
+
+function readU32(u, addr) {
+    const b = u.mem_read(addr, 4);
+    return (b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0;
+}
+
+function writeU32(u, addr, val) {
+    u.mem_write(addr, uint32ToBytes(val));
+}
+
+class SHTTSEmulator {
+    constructor(arm9Bytes) {
+        this.arm9 = arm9Bytes;
+        this.heapPtr = HEAP_BASE;
+        this.ctxAddr = 0;
+        this.u = null;
+    }
+
+    heapAlloc(size, align) {
+        align = align || 32;
+        let ptr = (this.heapPtr + align - 1) & ~(align - 1);
+        this.heapPtr = ptr + size;
+        if (this.heapPtr > HEAP_BASE + HEAP_SIZE) {
+            throw new Error("Heap exhausted: tried to allocate " + size + " bytes");
+        }
+        // Zero the allocation
+        const zeros = new Uint8Array(size);
+        this.u.mem_write(ptr, zeros);
+        return ptr;
+    }
+
+    setup() {
+        log("Initializing Unicorn ARM emulator...");
+        const u = new uc.Unicorn(uc.ARCH_ARM, uc.MODE_ARM);
+        this.u = u;
+
+        // Map memory regions
+        u.mem_map(ARM9_BASE, ARM9_SIZE, uc.PROT_ALL);
+        u.mem_map(HEAP_BASE, HEAP_SIZE, uc.PROT_ALL);
+        u.mem_map(DTCM_BASE, DTCM_SIZE, uc.PROT_ALL);
+        u.mem_map(IO_BASE, IO_SIZE, uc.PROT_ALL);
+        u.mem_map(SHARED_WRAM_BASE, SHARED_WRAM_SIZE, uc.PROT_ALL);
+        u.mem_map(VRAM_BASE, VRAM_SIZE, uc.PROT_ALL);
+        u.mem_map(ITCM_BASE, ITCM_SIZE, uc.PROT_ALL);
+
+        // Load arm9.bin
+        u.mem_write(ARM9_BASE, this.arm9);
+        log("Loaded arm9.bin: " + this.arm9.length + " bytes at 0x02000000");
+
+        // Set stack pointer
+        u.reg_write_i32(uc.ARM_REG_SP, STACK_TOP);
+
+        // Stub OS functions: MOV R0, #0; BX LR
+        const stubBytes = new Uint8Array([0x00, 0x00, 0xA0, 0xE3, 0x1E, 0xFF, 0x2F, 0xE1]);
+        for (const addr of STUB_FUNCTIONS) {
+            u.mem_write(addr, stubBytes);
+        }
+        log("Stubbed 5 NDS OS functions");
+
+        // Patch SHTTS_Speak for synchronous synthesis
+        // MOV R4, #1 = 0xE3A04001
+        u.mem_write(SYNC_PATCH_ADDR, new Uint8Array([0x01, 0x40, 0xA0, 0xE3]));
+        log("Patched SHTTS_Speak for sync mode");
+
+        // Write audio callback at 0x01007100 (13 ARM instructions)
+        const callbackWords = new Uint32Array([
+            0xE3500000, // CMP R0, #0
+            0xDA000009, // BLE return
+            0xE92D4070, // PUSH {R4-R6, LR}
+            0xE1A04080, // MOV R4, R0, LSL #1
+            0xE1A05001, // MOV R5, R1
+            0xE5926000, // LDR R6, [R2]
+            0xE0D530B2, // LDRH R3, [R5], #2
+            0xE0C630B2, // STRH R3, [R6], #2
+            0xE2544002, // SUBS R4, R4, #2
+            0xCAFFFFFB, // BGT copy_loop
+            0xE5826000, // STR R6, [R2]
+            0xE8BD8070, // POP {R4-R6, PC}
+            0xE12FFF1E, // BX LR
+        ]);
+        // Convert Uint32Array to Uint8Array (little-endian)
+        const cbBytes = new Uint8Array(callbackWords.buffer);
+        u.mem_write(CALLBACK_ADDR, cbBytes);
+        log("Audio callback installed at 0x01007100");
+
+        // Hook unmapped memory -- auto-map pages
+        const mappedPages = new Set();
+        u.hook_add(
+            uc.HOOK_MEM_READ_UNMAPPED | uc.HOOK_MEM_WRITE_UNMAPPED,
+            function(handle, type, addr_lo, addr_hi, size, value_lo, value_hi, user_data) {
+                const pageBase = (addr_lo >>> 0) & ~0xFFF;
+                if (!mappedPages.has(pageBase)) {
+                    try {
+                        handle.mem_map(pageBase, 0x1000, uc.PROT_ALL);
+                        mappedPages.add(pageBase);
+                    } catch (e) {
+                        // Already mapped or error
+                    }
+                }
+                return true;
+            }
+        );
+        log("Unmapped memory hook installed");
+    }
+
+    callFunction(addr, args) {
+        args = args || [];
+        const u = this.u;
+
+        // Set r0-r3
+        const regs = [uc.ARM_REG_R0, uc.ARM_REG_R1, uc.ARM_REG_R2, uc.ARM_REG_R3];
+        for (let i = 0; i < 4; i++) {
+            const val = i < args.length ? args[i] : 0;
+            u.reg_write_i32(regs[i], val | 0);
+        }
+
+        // Stack arguments (args[4:])
+        let sp = STACK_TOP;
+        if (args.length > 4) {
+            const nStackArgs = args.length - 4;
+            const stackSpace = ((nStackArgs * 4) + 7) & ~7;
+            sp -= stackSpace;
+            for (let i = 0; i < nStackArgs; i++) {
+                writeU32(u, sp + i * 4, args[4 + i]);
+            }
+        }
+        u.reg_write_i32(uc.ARM_REG_SP, sp);
+
+        // Set LR to sentinel
+        u.reg_write_i32(uc.ARM_REG_LR, SENTINEL);
+
+        // Ensure ARM mode (clear THUMB bit in CPSR)
+        let cpsr = u.reg_read_i32(uc.ARM_REG_CPSR);
+        cpsr &= ~(1 << 5);
+        u.reg_write_i32(uc.ARM_REG_CPSR, cpsr);
+
+        // Run
+        u.emu_start(addr, SENTINEL, 0, 0);
+
+        // Read return value (handle signed -> unsigned)
+        return u.reg_read_i32(uc.ARM_REG_R0);
+    }
+
+    initTTS() {
+        log("Allocating SHTTS context (" + SHTTS_CTX_SIZE + " bytes)...");
+        this.ctxAddr = this.heapAlloc(SHTTS_CTX_SIZE, 32);
+        log("Context at 0x" + this.ctxAddr.toString(16));
+
+        log("Calling SHTTS_Init...");
+        const ret = this.callFunction(SHTTS_INIT, [this.ctxAddr, this.ctxAddr]);
+        log("SHTTS_Init returned: " + ret);
+    }
+
+    setProperty(propId, value) {
+        return this.callFunction(SHTTS_SET_PROPERTY, [this.ctxAddr, propId, value]);
+    }
+
+    configureVoice(voice, emotion, speed, pitch, volume) {
+        const voiceId = VOICE_MAP[voice] || VOICE_MAP.admale;
+        const emotionId = EMOTION_MAP[emotion] || EMOTION_MAP.perky;
+
+        log("Setting voice=" + voice + " (0x" + voiceId.toString(16) + "), emotion=" + emotion + " (0x" + emotionId.toString(16) + ")");
+
+        this.setProperty(1, voiceId);   // Voice type
+        this.setProperty(2, emotionId); // Emotion
+        this.setProperty(5, volume);    // Volume/accent power
+
+        if (pitch > 0) {
+            this.setProperty(4, pitch); // Pitch base
+        }
+        if (speed !== 120) {
+            this.setProperty(3, speed); // Speed
+        }
+    }
+
+    speak(text) {
+        const u = this.u;
+
+        // Encode text as Shift-JIS
+        const textBytes = encodeShiftJIS(text);
+        log("Encoded text: " + textBytes.length + " bytes (Shift-JIS)");
+
+        // Allocate text buffer
+        const textBuf = this.heapAlloc(textBytes.length + 4, 4);
+        u.mem_write(textBuf, textBytes);
+
+        // Allocate PCM accumulation buffer (60 seconds max)
+        const pcmBufSize = SAMPLE_RATE * 2 * 60;
+        const pcmBufAddr = this.heapAlloc(pcmBufSize, 32);
+
+        // Allocate user_data struct: { write_ptr, buf_base, buf_end }
+        const userDataAddr = this.heapAlloc(12, 4);
+        writeU32(u, userDataAddr,     pcmBufAddr);              // write_ptr
+        writeU32(u, userDataAddr + 4, pcmBufAddr);              // buf_base
+        writeU32(u, userDataAddr + 8, pcmBufAddr + pcmBufSize); // buf_end
+
+        log("Calling SHTTS_Speak (synchronous)...");
+        const t0 = performance.now();
+
+        this.callFunction(SHTTS_SPEAK, [
+            this.ctxAddr,
+            textBuf,
+            1,              // mode: sync wait
+            0,              // channel
+            CALLBACK_ADDR,  // callback function pointer
+            userDataAddr    // user_data
+        ]);
+
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+
+        // Read write_ptr to determine bytes written
+        const writePtr = readU32(u, userDataAddr);
+        const bytesWritten = (writePtr - pcmBufAddr) >>> 0;
+        const duration = (bytesWritten / (SAMPLE_RATE * 2)).toFixed(2);
+
+        log("Synthesis complete in " + elapsed + "s");
+        log("PCM: " + bytesWritten + " bytes (" + duration + "s at " + SAMPLE_RATE + "Hz)");
+
+        if (bytesWritten === 0) {
+            log("WARNING: No PCM data generated!");
+            return null;
+        }
+
+        // Read PCM data from emulated memory
+        return u.mem_read(pcmBufAddr, bytesWritten);
+    }
+
+    close() {
+        if (this.u) {
+            this.u.close();
+            this.u = null;
+        }
+    }
+}
+
+// =====================================================================
+// WAV builder
+// =====================================================================
+
+function buildWav(pcmData) {
+    // pcmData: Uint8Array of 16-bit signed LE mono PCM
+    const numSamples = pcmData.length / 2;
+    const headerSize = 44;
+    const wav = new ArrayBuffer(headerSize + pcmData.length);
+    const view = new DataView(wav);
+
+    // RIFF header
+    view.setUint32(0, 0x52494646, false);  // "RIFF"
+    view.setUint32(4, 36 + pcmData.length, true); // file size - 8
+    view.setUint32(8, 0x57415645, false);  // "WAVE"
+
+    // fmt chunk
+    view.setUint32(12, 0x666D7420, false); // "fmt "
+    view.setUint32(16, 16, true);          // chunk size
+    view.setUint16(20, 1, true);           // PCM format
+    view.setUint16(22, 1, true);           // mono
+    view.setUint32(24, SAMPLE_RATE, true); // sample rate
+    view.setUint32(28, SAMPLE_RATE * 2, true); // byte rate
+    view.setUint16(32, 2, true);           // block align
+    view.setUint16(34, 16, true);          // bits per sample
+
+    // data chunk
+    view.setUint32(36, 0x64617461, false); // "data"
+    view.setUint32(40, pcmData.length, true);
+
+    // Copy PCM data
+    const wavBytes = new Uint8Array(wav);
+    wavBytes.set(pcmData, headerSize);
+
+    return new Blob([wav], { type: "audio/wav" });
+}
+
+// =====================================================================
+// Synthesize button handler
+// =====================================================================
+
+synthBtn.addEventListener("click", () => {
+    if (!arm9Data) {
+        log("No arm9.bin loaded!");
+        return;
+    }
+
+    const text = document.getElementById("tts-text").value.trim();
+    if (!text) {
+        log("No text entered!");
+        return;
+    }
+
+    const voice = document.getElementById("voice").value;
+    const emotion = document.getElementById("emotion").value;
+    const speed = parseInt(document.getElementById("speed").value);
+    const volume = parseInt(document.getElementById("volume").value);
+    const pitch = parseInt(document.getElementById("pitch").value);
+
+    clearLog();
+    synthBtn.disabled = true;
+    audioEl.src = "";
+    downloadEl.style.display = "none";
+
+    log("=== SHTTS Web Synthesizer ===");
+    log("Text: " + text);
+    log("Voice: " + voice + " / " + emotion);
+    log("Speed: " + speed + ", Volume: " + volume + ", Pitch: " + pitch);
+    log("");
+
+    // Use setTimeout to let the UI update before blocking on emulation
+    setTimeout(() => {
+        try {
+            const emu = new SHTTSEmulator(arm9Data);
+            emu.setup();
+            emu.initTTS();
+            emu.configureVoice(voice, emotion, speed, pitch, volume);
+
+            log("");
+            log("Synthesizing: " + text);
+            const pcmData = emu.speak(text);
+            emu.close();
+
+            if (pcmData && pcmData.length > 0) {
+                const blob = buildWav(pcmData);
+                const url = URL.createObjectURL(blob);
+
+                audioEl.src = url;
+                audioEl.play();
+
+                downloadEl.href = url;
+                downloadEl.download = "shtts_output.wav";
+                downloadEl.textContent = "Download WAV (" + (pcmData.length / 1024).toFixed(1) + " KB)";
+                downloadEl.style.display = "inline-block";
+
+                log("");
+                log("Done! Audio playing.");
+            } else {
+                log("Synthesis produced no output.");
+            }
+        } catch (e) {
+            log("ERROR: " + e.toString());
+            if (e.stack) log(e.stack);
+        }
+        synthBtn.disabled = false;
+    }, 50);
+});
+
+// =====================================================================
+// Startup
+// =====================================================================
+
+log("SHTTS Web Synthesizer ready.");
+log("Load an NDS ROM or arm9.bin to begin.");
+</script>
+</body>
+</html>

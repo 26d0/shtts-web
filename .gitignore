@@ -1,0 +1,6 @@
+# ROM and binary files -- never commit game data
+*.nds
+*.bin
+
+# Keep the Unicorn.js library
+!lib/unicorn-arm.min.js
