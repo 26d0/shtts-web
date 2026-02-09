@@ -1,41 +1,36 @@
 # SHTTS Web Synthesizer
 
-Browser-based frontend for the **SHARP SHTTS v1.1.1** text-to-speech engine from *Shaberu! DS Oryouri Navi* (Nintendo DS, 2006).
+Runs the SHARP SHTTS v1.1.1 TTS engine from Shaberu! DS Oryouri Navi (NDS, 2006) in a browser. You give it the ROM (or just the arm9.bin), type katakana with prosody markers, and it speaks.
 
-Runs the original ARM binary code in-browser via [Unicorn.js](https://github.com/AlexAltea/unicorn.js) (Unicorn Engine compiled to JavaScript with Emscripten). No server required -- everything runs client-side.
+The engine is a PARCOR lattice-filter synthesizer baked entirely into the game's ARM9 binary (~180KB of voice model data, ~44KB of synthesis code). This tool loads that binary into [Unicorn.js](https://github.com/AlexAltea/unicorn.js) (an ARM emulator compiled to JS), stubs out the NDS OS calls, patches `SHTTS_Speak` for synchronous execution, and collects the PCM output. 12 voices, 16 emotions, adjustable speed/pitch/volume. Output is 22050 Hz 16-bit mono.
 
-## Features
-
-- All 12 voice types (male, female, child, elderly, character voices)
-- All 16 emotion presets (happy, calm, angry, whisper, etc.)
-- Adjustable speed, pitch, and volume
-- Accepts katakana text with SHTTS prosody markers
-- Outputs 22050 Hz 16-bit mono PCM (playback + WAV download)
-- Loads ROM (.nds) or raw arm9.bin directly
+No server, no backend. Everything runs client-side.
 
 ## Usage
 
 1. Open `tts_web.html` in a browser
-2. Load your own legally-obtained copy of *Shaberu! DS Oryouri Navi* ROM or its extracted `arm9.bin`
-3. Enter katakana text with prosody markers (e.g. `コンニチワ．`)
-4. Select voice, emotion, and parameters
-5. Click **Synthesize**
+2. Load your ROM (.nds) or extracted arm9.bin
+3. Type katakana text with prosody markers, pick a voice/emotion, hit Synthesize
 
-### Prosody markers
+You need a legally-obtained copy of the game. No ROM data is included here.
 
-| Marker | Function |
-|--------|----------|
-| `'` | Accent nucleus (pitch drops after preceding mora) |
+## Prosody markers
+
+The TTS engine uses full-width katakana with these inline markers:
+
+| Marker | What it does |
+|--------|-------------|
+| `'` | Accent nucleus -- pitch drops after the preceding mora |
 | `２` | Word/phrase boundary |
-| `０` | Falling intonation / sentence-final |
-| `％` | Devoicing |
+| `０` | Falling intonation (sentence-final) |
+| `％` | Devoices the preceding mora |
 | `／` | Accent phrase boundary |
-| `＿` | Pause (multiple for longer) |
-| `．` | Sentence end (declarative) |
-| `！` | Sentence end (exclamatory) |
-| `？` | Sentence end (interrogative) |
+| `＿` | Pause. Stack them for longer pauses: `＿＿＿` |
+| `．` | End of sentence (declarative) |
+| `！` | End of sentence (exclamatory) |
+| `？` | End of sentence (interrogative, rising pitch) |
 
-### Example inputs
+Examples:
 
 ```
 コンニチワ．
@@ -43,46 +38,19 @@ Runs the original ARM binary code in-browser via [Unicorn.js](https://github.com
 ヨ'２ーコソ＿シャベ'２ル＿ディーエス２＿オリョーリ２／ナ'２ビエ！
 ```
 
-## Requirements
-
-- A modern browser with JavaScript enabled
-- Your own legally-obtained ROM file
-
-**No ROM, game data, or proprietary code is included in this repository.**
-
-## File structure
-
-```
-shtts-web/
-├── LICENSE                  # GPLv2
-├── README.md
-├── tts_web.html             # Main application
-└── lib/
-    └── unicorn-arm.min.js   # Unicorn.js ARM build (GPLv2)
-```
-
 ## How it works
 
-The NDS game contains SHARP's SHTTS (SH Text-to-Speech) v1.1.1 engine entirely within its ARM9 binary -- a PARCOR lattice-filter speech synthesizer with ~180KB of baked-in voice model data. This tool:
+The emulator maps arm9.bin at 0x02000000 (same as real NDS hardware), allocates an 80KB context on a fake heap, and stubs 5 OS functions (mutex lock/unlock, thread create/start, sleep) as no-ops. A patch at 0x0202C740 forces synchronous synthesis so we don't need to emulate the NDS threading model. An audio callback stub in ITCM space copies PCM chunks into an accumulation buffer as the engine calls it repeatedly with 480-sample blocks. When `SHTTS_Speak` returns, the buffer gets wrapped in a WAV header for playback and download.
 
-1. Loads the ARM9 binary into a Unicorn Engine (ARM emulator) instance
-2. Stubs 5 NDS OS functions (mutex, threading, sleep) as no-ops
-3. Patches `SHTTS_Speak` for synchronous execution
-4. Calls the original `SHTTS_Init`, `SHTTS_SetProperty`, and `SHTTS_Speak` functions
-5. Collects PCM output via an audio callback stub
-6. Wraps the result in a WAV container for playback/download
+The function addresses and voice/emotion enum values were found by reverse engineering arm9.bin in Ghidra.
 
-## Legal notice
+## Legal
 
-- **SHARP SHTTS v1.1.1**: The TTS engine, voice model data, and synthesis code are the proprietary property of **SHARP Corporation**.
-- **Shaberu! DS Oryouri Navi**: (C) 2006 Nintendo / indieszero. All rights reserved.
-- This repository contains **no copyrighted game data, engine code, or voice models**. Users must supply their own legally-obtained ROM or arm9.bin file.
-- For **personal, non-commercial, research and educational use only**.
-- Internal function addresses and API constants were obtained through reverse engineering for interoperability research purposes.
+SHARP SHTTS v1.1.1 (the TTS engine, voice models, and synthesis code) is proprietary to SHARP Corporation. Shaberu! DS Oryouri Navi is (C) 2006 Nintendo / indieszero. This repository contains none of that -- users supply their own ROM at runtime. The internal addresses and API constants come from reverse engineering for interoperability purposes. Personal and educational use only.
 
 ## License
 
-This project is licensed under the [GNU General Public License v2.0](LICENSE) (GPLv2), due to its dependency on [Unicorn.js](https://github.com/AlexAltea/unicorn.js) which is GPLv2-licensed.
+GPLv2, because Unicorn.js is GPLv2.
 
 ```
 Copyright (C) 2025 shtts-web contributors
@@ -92,8 +60,6 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
 (at your option) any later version.
 ```
-
-### Third-party components
 
 | Component | License | Source |
 |-----------|---------|--------|
